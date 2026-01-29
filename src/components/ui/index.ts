@@ -1,0 +1,23 @@
+// Re-export all UI components from a single entry point
+export { Button, buttonVariants } from './button';
+export type { ButtonProps } from './button';
+
+export { Input } from './input';
+
+export { Label } from './label';
+
+export {
+  Card,
+  CardHeader,
+  CardFooter,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from './card';
+
+export { Badge, badgeVariants } from './badge';
+export type { BadgeProps } from './badge';
+
+export { Spinner } from './spinner';
+
+export { Avatar, AvatarImage, AvatarFallback } from './avatar';
