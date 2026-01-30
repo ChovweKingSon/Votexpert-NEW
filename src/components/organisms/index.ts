@@ -16,3 +16,8 @@ export { DataTable, type Column } from './DataTable';
 export { FileUpload } from './FileUpload';
 export { ElectionForm } from './ElectionForm';
 export { DashboardStats, ElectionDashboardStats } from './DashboardStats';
+
+// Results organisms
+export { PositionResultsCard } from './ResultsCard';
+export { ResultsSummary } from './ResultsSummary';
+export { VoteReceipt } from './VoteReceipt';
