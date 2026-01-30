@@ -17,6 +17,16 @@ export {
   CardDescription,
   CardContent,
 } from '@/components/ui/card';
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption,
+} from '@/components/ui/table';
 
 // Custom atoms
 export { Logo } from './Logo';

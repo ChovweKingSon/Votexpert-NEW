@@ -10,3 +10,9 @@ export { ElectionList } from './ElectionList';
 export { ElectionDetailsCard } from './ElectionDetailsCard';
 export { CandidateList } from './CandidateList';
 export { VotingBooth } from './VotingBooth';
+
+// Admin organisms
+export { DataTable, type Column } from './DataTable';
+export { FileUpload } from './FileUpload';
+export { ElectionForm } from './ElectionForm';
+export { DashboardStats, ElectionDashboardStats } from './DashboardStats';
