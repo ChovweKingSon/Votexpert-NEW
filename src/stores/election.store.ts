@@ -1,5 +1,24 @@
 import { atom, map, computed } from 'nanostores';
 
+// Vote receipt type
+export interface VoteReceiptData {
+  vote_id: string;
+  timestamp: string;
+  positions_voted: number;
+  electionName: string;
+}
+
+// Vote receipt state
+export const $voteReceipt = atom<VoteReceiptData | null>(null);
+
+export function setVoteReceipt(receipt: VoteReceiptData) {
+  $voteReceipt.set(receipt);
+}
+
+export function clearVoteReceipt() {
+  $voteReceipt.set(null);
+}
+
 // Current election context
 export const $currentElectionId = atom<string | null>(null);
 export const $currentElectionName = atom<string>('');
