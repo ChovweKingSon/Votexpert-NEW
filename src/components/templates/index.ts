@@ -3,3 +3,4 @@
 export { AuthLayout } from './AuthLayout';
 export { VoterLayout } from './VoterLayout';
 export { AdminLayout } from './AdminLayout';
+export { ErrorBoundary } from './ErrorBoundary';
