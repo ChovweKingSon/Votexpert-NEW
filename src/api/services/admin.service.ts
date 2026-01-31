@@ -34,6 +34,23 @@ export async function adminVerifyOtp(
 }
 
 // Elections Management
+export async function getAdminElections(): Promise<{
+  success: boolean;
+  elections: Array<{
+    election_id: string;
+    election_name: string;
+    description: string;
+    status: string;
+    election_start_time: string;
+    election_end_time: string;
+    total_voters: number;
+    votes_cast: number;
+  }>;
+}> {
+  const response = await apiClient.get(ENDPOINTS.ADMIN_ELECTIONS);
+  return response.data;
+}
+
 export async function createElection(
   payload: CreateElectionPayload
 ): Promise<CreateElectionResponse> {

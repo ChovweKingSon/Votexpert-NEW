@@ -6,49 +6,11 @@ import { AdminLayout } from '@/components/templates';
 import { ElectionList } from '@/components/organisms';
 import { AlertMessage } from '@/components/molecules';
 import { Button } from '@/components/atoms';
+import { getAdminElections } from '@/api/services/admin.service';
 import { $user, $isAuthenticated, $isAdmin, logout } from '@/stores/auth.store';
 import { useStore } from '@nanostores/react';
 import { Plus } from 'lucide-react';
 import type { Admin, ElectionStatus } from '@/types';
-
-// Mock function - would be replaced with actual API call
-async function getAdminElections() {
-  return {
-    success: true,
-    elections: [
-      {
-        id: '1',
-        name: '2026 Board Elections',
-        description: 'Annual board member elections',
-        status: 'ongoing' as ElectionStatus,
-        startTime: new Date().toISOString(),
-        endTime: new Date(Date.now() + 86400000 * 3).toISOString(),
-        totalVoters: 500,
-        votesCast: 320,
-      },
-      {
-        id: '2',
-        name: 'Alumni Association Elections',
-        description: 'Election of new alumni representatives',
-        status: 'active' as ElectionStatus,
-        startTime: new Date(Date.now() + 86400000).toISOString(),
-        endTime: new Date(Date.now() + 86400000 * 7).toISOString(),
-        totalVoters: 750,
-        votesCast: 0,
-      },
-      {
-        id: '3',
-        name: 'Student Council Elections 2025',
-        description: 'Previous student council election',
-        status: 'results_announced' as ElectionStatus,
-        startTime: new Date(Date.now() - 86400000 * 30).toISOString(),
-        endTime: new Date(Date.now() - 86400000 * 23).toISOString(),
-        totalVoters: 1200,
-        votesCast: 890,
-      },
-    ],
-  };
-}
 
 export const adminElectionsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -93,6 +55,21 @@ function AdminElectionsPage() {
     navigate({ to: '/admin/elections/create' });
   };
 
+  // Transform API data to match component interface
+  const elections = React.useMemo(() => {
+    if (!data?.elections) return [];
+    return data.elections.map((e) => ({
+      id: e.election_id,
+      name: e.election_name,
+      description: e.description,
+      status: e.status as ElectionStatus,
+      startTime: e.election_start_time,
+      endTime: e.election_end_time,
+      totalVoters: e.total_voters,
+      votesCast: e.votes_cast,
+    }));
+  }, [data?.elections]);
+
   if (!isAuthenticated || !isAdmin) {
     return null;
   }
@@ -128,7 +105,7 @@ function AdminElectionsPage() {
 
         {/* Elections List */}
         <ElectionList
-          elections={data?.elections || []}
+          elections={elections}
           isLoading={isLoading}
           emptyMessage="No elections yet. Create your first election!"
           onElectionClick={handleElectionClick}

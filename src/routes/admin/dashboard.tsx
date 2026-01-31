@@ -6,46 +6,11 @@ import { AdminLayout } from '@/components/templates';
 import { ElectionDashboardStats, ElectionList } from '@/components/organisms';
 import { AlertMessage } from '@/components/molecules';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/atoms';
+import { getAdminElections } from '@/api/services/admin.service';
 import { $user, $isAuthenticated, $isAdmin, logout } from '@/stores/auth.store';
 import { useStore } from '@nanostores/react';
 import { Plus } from 'lucide-react';
 import type { Admin, ElectionStatus } from '@/types';
-
-// Mock function - would be replaced with actual API call
-async function getAdminDashboard() {
-  // In a real implementation, this would fetch dashboard data from the API
-  return {
-    success: true,
-    stats: {
-      totalElections: 5,
-      activeElections: 2,
-      totalVoters: 1250,
-      totalVotesCast: 890,
-    },
-    recentElections: [
-      {
-        id: '1',
-        name: '2026 Board Elections',
-        description: 'Annual board member elections',
-        status: 'ongoing' as ElectionStatus,
-        startTime: new Date().toISOString(),
-        endTime: new Date(Date.now() + 86400000 * 3).toISOString(),
-        totalVoters: 500,
-        votesCast: 320,
-      },
-      {
-        id: '2',
-        name: 'Alumni Association Elections',
-        description: 'Election of new alumni representatives',
-        status: 'active' as ElectionStatus,
-        startTime: new Date(Date.now() + 86400000).toISOString(),
-        endTime: new Date(Date.now() + 86400000 * 7).toISOString(),
-        totalVoters: 750,
-        votesCast: 0,
-      },
-    ],
-  };
-}
 
 export const adminDashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -66,12 +31,43 @@ function AdminDashboardPage() {
     }
   }, [isAuthenticated, isAdmin, navigate]);
 
-  // Fetch dashboard data
+  // Fetch elections data
   const { data, isLoading, error } = useQuery({
-    queryKey: ['admin', 'dashboard'],
-    queryFn: getAdminDashboard,
+    queryKey: ['admin', 'elections'],
+    queryFn: getAdminElections,
     enabled: isAuthenticated && isAdmin,
   });
+
+  // Transform API data and compute stats
+  const { elections, stats } = React.useMemo(() => {
+    if (!data?.elections) {
+      return {
+        elections: [],
+        stats: { totalElections: 0, activeElections: 0, totalVoters: 0, totalVotesCast: 0 },
+      };
+    }
+
+    const electionsList = data.elections.map((e) => ({
+      id: e.election_id,
+      name: e.election_name,
+      description: e.description,
+      status: e.status as ElectionStatus,
+      startTime: e.election_start_time,
+      endTime: e.election_end_time,
+      totalVoters: e.total_voters,
+      votesCast: e.votes_cast,
+    }));
+
+    const activeStatuses = ['active', 'ongoing'];
+    const computedStats = {
+      totalElections: electionsList.length,
+      activeElections: electionsList.filter((e) => activeStatuses.includes(e.status)).length,
+      totalVoters: electionsList.reduce((sum, e) => sum + (e.totalVoters || 0), 0),
+      totalVotesCast: electionsList.reduce((sum, e) => sum + (e.votesCast || 0), 0),
+    };
+
+    return { elections: electionsList.slice(0, 5), stats: computedStats };
+  }, [data?.elections]);
 
   const handleLogout = () => {
     logout();
@@ -125,10 +121,10 @@ function AdminDashboardPage() {
 
         {/* Stats */}
         <ElectionDashboardStats
-          totalElections={data?.stats.totalElections || 0}
-          activeElections={data?.stats.activeElections || 0}
-          totalVoters={data?.stats.totalVoters || 0}
-          totalVotesCast={data?.stats.totalVotesCast || 0}
+          totalElections={stats.totalElections}
+          activeElections={stats.activeElections}
+          totalVoters={stats.totalVoters}
+          totalVotesCast={stats.totalVotesCast}
           isLoading={isLoading}
         />
 
@@ -146,7 +142,7 @@ function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <ElectionList
-              elections={data?.recentElections || []}
+              elections={elections}
               isLoading={isLoading}
               emptyMessage="No elections yet. Create your first election!"
               onElectionClick={handleElectionClick}
