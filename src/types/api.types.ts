@@ -16,7 +16,7 @@ export interface Admin {
 export interface AdminLoginResponse {
   success: boolean;
   message: string;
-  session_token: string;
+  token: string;
   expires_in: number;
 }
 

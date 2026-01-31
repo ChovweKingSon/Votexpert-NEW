@@ -5,8 +5,22 @@ import { rootRoute } from '../__root';
 import { AuthLayout } from '@/components/templates';
 import { LoginForm } from '@/components/organisms';
 import { adminLogin } from '@/api/services/admin.service';
-import { setSessionToken } from '@/stores/auth.store';
-import type { AdminLoginCredentials } from '@/types';
+import { setTokens, setUser } from '@/stores/auth.store';
+import type { AdminLoginCredentials, Admin } from '@/types';
+
+function decodeJwtPayload(token: string): Admin | null {
+  try {
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(atob(payload));
+    return {
+      admin_id: decoded.admin_id,
+      username: decoded.username,
+      email: decoded.email,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export const adminLoginRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -22,9 +36,18 @@ function AdminLoginPage() {
     mutationFn: adminLogin,
     onSuccess: (data) => {
       if (data.success) {
-        // Store the session token for OTP verification
-        setSessionToken(data.session_token);
-        navigate({ to: '/admin/otp' });
+        // Decode JWT to get admin info
+        const admin = decodeJwtPayload(data.token);
+        if (!admin) {
+          setError('Failed to decode authentication token.');
+          return;
+        }
+
+        // Store tokens and user info
+        setTokens({ accessToken: data.token, refreshToken: '' });
+        setUser(admin, 'admin');
+
+        navigate({ to: '/admin/dashboard' });
       } else {
         setError(data.message || 'Login failed. Please try again.');
       }
@@ -37,7 +60,7 @@ function AdminLoginPage() {
   const handleSubmit = (data: Record<string, string>) => {
     setError(undefined);
     const credentials: AdminLoginCredentials = {
-      username_or_email: data.username_or_email,
+      username: data.username_or_email,
       password: data.password,
     };
     loginMutation.mutate(credentials);
