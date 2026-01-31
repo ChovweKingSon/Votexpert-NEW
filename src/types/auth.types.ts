@@ -11,8 +11,9 @@ export interface AuthState {
 }
 
 export interface AdminLoginCredentials {
-  username_or_email: string;
+  username: string;
   password: string;
+  // email?: string;
 }
 
 export interface AdminOtpPayload {
