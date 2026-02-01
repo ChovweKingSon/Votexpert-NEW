@@ -33,6 +33,41 @@ export async function adminVerifyOtp(
   return response.data;
 }
 
+// Candidates Management
+export async function getAdminCandidates(): Promise<{
+  success: boolean;
+  candidates: Array<{
+    candidate_id: string;
+    name: string;
+    position: string;
+    election_id: string;
+    election_name: string;
+    bio: string;
+    photo_url: string;
+    status: string;
+  }>;
+}> {
+  const response = await apiClient.get(ENDPOINTS.ADMIN_CANDIDATES);
+  return response.data;
+}
+
+// Voters Management
+export async function getAdminVoters(): Promise<{
+  success: boolean;
+  voters: Array<{
+    voter_id: string;
+    name: string;
+    email: string;
+    election_id: string;
+    election_name: string;
+    has_voted: boolean;
+    verified: boolean;
+  }>;
+}> {
+  const response = await apiClient.get(ENDPOINTS.ADMIN_VOTERS);
+  return response.data;
+}
+
 // Elections Management
 export async function getAdminElections(): Promise<{
   success: boolean;

@@ -7,6 +7,8 @@ export const ENDPOINTS = {
 
   // Admin Elections
   ADMIN_ELECTIONS: '/admin/elections',
+  ADMIN_CANDIDATES: '/admin/candidates',
+  ADMIN_VOTERS: '/admin/voters',
   ADMIN_ELECTION_DETAILS: (id: string) => `/admin/elections/${id}`,
   ADMIN_ELECTION_STATISTICS: (id: string) => `/admin/elections/${id}/statistics`,
   ADMIN_ELECTION_STATUS: (id: string) => `/admin/elections/${id}/status`,
