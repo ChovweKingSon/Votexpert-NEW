@@ -15,10 +15,24 @@ def lambda_handler(event, context):
     try:
         response = table.scan()
         voters = response.get('Items', [])
+
+        formatted_voters = []
+        for v in voters:
+            formatted_voters.append({
+                'voter_id': v.get('voter_id', ''),
+                'user_id': v.get('user_id', ''),
+                'name': v.get('name', v.get('user_id', '')),
+                'email': v.get('email', ''),
+                'election_id': v.get('election_id', ''),
+                'has_voted': v.get('has_voted', False),
+                'verification_status': v.get('verification_status', 'pending'),
+                'verified': v.get('verification_status') == 'verified'
+            })
+
         return {
             'statusCode': 200,
             'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-            'body': json.dumps({'success': True, 'voters': voters}, cls=DecimalEncoder)
+            'body': json.dumps({'success': True, 'voters': formatted_voters}, cls=DecimalEncoder)
         }
     except Exception as ex:
         return {
