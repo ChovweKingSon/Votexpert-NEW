@@ -53,6 +53,11 @@ function VoterOtpPage() {
             has_voted: data.voter.has_voted,
             voted_at: null
           }, 'voter');
+
+          // Save election data to localStorage for elections page
+          if (data.election) {
+            localStorage.setItem('votexpert_election', JSON.stringify(data.election));
+          }
         }
         navigate({ to: '/voter/elections' });
       } else {
