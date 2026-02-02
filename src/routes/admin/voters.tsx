@@ -51,13 +51,13 @@ function AdminVotersPage() {
 
   type Voter = {
     voter_id: string;
-    user_id: string;
-    name: string;
-    email: string;
+    user_id?: string;
+    name?: string;
+    email?: string;
     election_id: string;
     has_voted: boolean;
-    verified: boolean;
-    verification_status: string;
+    verified?: boolean;
+    verification_status?: string;
   };
 
   const columns = [
