@@ -4,7 +4,9 @@ import { rootRoute } from '../../__root';
 import { VoterLayout } from '@/components/templates';
 import { ElectionList } from '@/components/organisms';
 import { AlertMessage } from '@/components/molecules';
+import { Button } from '@/components/atoms';
 import { $user, $isAuthenticated, logout } from '@/stores/auth.store';
+import { BarChart3 } from 'lucide-react';
 import { useStore } from '@nanostores/react';
 import type { Voter, ElectionStatus } from '@/types';
 
@@ -55,6 +57,12 @@ function VoterElectionsPage() {
     navigate({ to: '/voter/elections/$electionId', params: { electionId } });
   };
 
+  const handleViewResults = () => {
+    if (electionData) {
+      navigate({ to: '/voter/results/$electionId', params: { electionId: electionData.election_id } });
+    }
+  };
+
   // Transform election data for the list
   const elections = React.useMemo(() => {
     if (!electionData) return [];
@@ -100,9 +108,19 @@ function VoterElectionsPage() {
 
         {/* Voting status message */}
         {user && 'has_voted' in user && user.has_voted && (
-          <AlertMessage variant="success">
-            You have already cast your vote in this election. Thank you for participating!
-          </AlertMessage>
+          <div className="space-y-4">
+            <AlertMessage variant="success">
+              You have already cast your vote in this election. Thank you for participating!
+            </AlertMessage>
+            <Button
+              onClick={handleViewResults}
+              variant="outline"
+              className="w-full sm:w-auto"
+            >
+              <BarChart3 className="mr-2 h-4 w-4" />
+              View Live Results
+            </Button>
+          </div>
         )}
 
         <ElectionList

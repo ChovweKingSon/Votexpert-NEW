@@ -4,7 +4,7 @@ import { rootRoute } from '../__root';
 import { AuthLayout } from '@/components/templates';
 import { FaceCapture } from '@/components/organisms';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/atoms';
-import { setTokens, setUser } from '@/stores/auth.store';
+import { logout, setTokens, setUser } from '@/stores/auth.store';
 import { AlertTriangle } from 'lucide-react';
 
 export const voterFaceVerificationRoute = createRoute({
@@ -50,6 +50,9 @@ function FaceVerificationPage() {
       // For now, complete the login after face capture
       // In production, this would call a face verification API
       const tempToken = localStorage.getItem('votexpert_temp_token');
+
+      // Clear any existing auth (e.g., admin tokens) before setting voter auth
+      logout();
 
       // Set up auth with stored data
       setTokens({
