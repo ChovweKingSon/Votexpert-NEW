@@ -6,7 +6,7 @@ import { AuthLayout } from '@/components/templates';
 import { OtpVerificationForm } from '@/components/organisms';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/atoms';
 import { voterVerifyOtp } from '@/api/services/voter.service';
-import { setFaceVerificationToken } from '@/stores/auth.store';
+import { setFaceVerificationToken, setTokens, setUser } from '@/stores/auth.store';
 import type { VoterOtpPayload } from '@/types';
 
 interface OtpSearchParams {
@@ -40,11 +40,19 @@ function VoterOtpPage() {
         setFaceVerificationToken(data.face_verification_token);
         navigate({ to: '/voter/face-verification' });
       } else if (data.success) {
-        // Store auth tokens and go to elections
-        if (data.access_token) {
-          localStorage.setItem('votexpert_access_token', data.access_token);
-          localStorage.setItem('votexpert_voter', JSON.stringify(data.voter));
-          localStorage.setItem('votexpert_election', JSON.stringify(data.election));
+        // Store auth tokens and user in store
+        if (data.access_token && data.voter) {
+          setTokens({
+            accessToken: data.access_token,
+            refreshToken: data.access_token // Using same token for now
+          });
+          setUser({
+            voter_id: data.voter.voter_id,
+            name: data.voter.name,
+            email: data.voter.email,
+            has_voted: data.voter.has_voted,
+            voted_at: null
+          }, 'voter');
         }
         navigate({ to: '/voter/elections' });
       } else {
