@@ -6,7 +6,6 @@ import { AuthLayout } from '@/components/templates';
 import { OtpVerificationForm } from '@/components/organisms';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/atoms';
 import { voterVerifyOtp } from '@/api/services/voter.service';
-import { setFaceVerificationToken, setTokens, setUser } from '@/stores/auth.store';
 import type { VoterOtpPayload } from '@/types';
 
 interface OtpSearchParams {
@@ -35,31 +34,17 @@ function VoterOtpPage() {
   const verifyMutation = useMutation({
     mutationFn: voterVerifyOtp,
     onSuccess: (data) => {
-      if (data.success && data.face_verification_required && data.face_verification_token) {
-        // Store face verification token and redirect
-        setFaceVerificationToken(data.face_verification_token);
-        navigate({ to: '/voter/face-verification' });
-      } else if (data.success) {
-        // Store auth tokens and user in store
-        if (data.access_token && data.voter) {
-          setTokens({
-            accessToken: data.access_token,
-            refreshToken: data.access_token // Using same token for now
-          });
-          setUser({
-            voter_id: data.voter.voter_id,
-            name: data.voter.name,
-            email: data.voter.email,
-            has_voted: data.voter.has_voted,
-            voted_at: null
-          }, 'voter');
-
-          // Save election data to localStorage for elections page
-          if (data.election) {
-            localStorage.setItem('votexpert_election', JSON.stringify(data.election));
-          }
+      if (data.success && data.voter) {
+        // Save voter and election data for face verification
+        localStorage.setItem('votexpert_pending_voter', JSON.stringify(data.voter));
+        if (data.election) {
+          localStorage.setItem('votexpert_election', JSON.stringify(data.election));
         }
-        navigate({ to: '/voter/elections' });
+        if (data.access_token) {
+          localStorage.setItem('votexpert_temp_token', data.access_token);
+        }
+        // Always go to face verification after OTP
+        navigate({ to: '/voter/face-verification' });
       } else {
         setError(data.message || 'OTP verification failed. Please try again.');
       }
