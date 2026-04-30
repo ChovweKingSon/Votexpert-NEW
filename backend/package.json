@@ -21,6 +21,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1013.0",
     "@vendia/serverless-express": "^4.12.6",
     "aws-cdk-lib": "^2.170.0",
+    "axios": "^1.15.2",
     "constructs": "^10.4.2",
     "cors": "^2.8.5",
     "express": "^4.21.2",
