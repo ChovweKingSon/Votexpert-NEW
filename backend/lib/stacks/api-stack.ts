@@ -76,6 +76,8 @@ export class ApiStack extends cdk.Stack {
         SMTP_USER: process.env.SMTP_USER ?? '',
         SMTP_PASS: process.env.SMTP_PASS ?? '',
         EMAIL_FROM: process.env.EMAIL_FROM ?? 'noreply@votexpert.com',
+        PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY ?? '',
+        CLIENT_URL: process.env.CLIENT_URL ?? 'https://votexpert.online',
         UPLOADS_BUCKET: mediaBucket.bucketName,
       },
       bundling: {
