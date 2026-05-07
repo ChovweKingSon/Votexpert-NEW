@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda'
 import { PutCommand } from '@aws-sdk/lib-dynamodb'
 import { v4 as uuid } from 'uuid'
@@ -16,22 +17,51 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (!body.type) return badRequest('type is required (OPEN or CLOSED)')
 
     const now = new Date().toISOString()
+
+    // If a future start time is provided → SCHEDULED, otherwise DRAFT
+    const isScheduled = body.scheduled_start_at && new Date(body.scheduled_start_at) > new Date()
+
     const election: Election = {
       election_id: uuid(),
       org_id: org.org_id,
       title: body.title.trim(),
       description: body.description?.trim(),
       type: body.type,
-      status: ElectionStatus.DRAFT,
+      status: isScheduled ? ElectionStatus.SCHEDULED : ElectionStatus.DRAFT,
       scheduled_start_at: body.scheduled_start_at,
+      scheduled_end_at: body.scheduled_end_at,
       show_live_results: body.show_live_results ?? true,
+      election_code: Math.floor(100000 + Math.random() * 900000).toString(),
+      leaderboard_mode: body.leaderboard_mode ?? 'at_end',
       created_at: now,
       updated_at: now,
     }
 
-    await db.send(new PutCommand({ TableName: Tables.ELECTIONS, Item: election }))
+    // 🔥 Initialize Paystack payment instead of creating election
 
-    return created(election)
+const response = await axios.post(
+  'https://api.paystack.co/transaction/initialize',
+  {
+    email: org.email || 'test@email.com',
+    amount: 5000 * 100,
+    callback_url: 'https://your-frontend.com/payment-success',
+
+    metadata: {
+      electionData: body,
+      org_id: org.org_id
+    }
+  },
+  {
+    headers: {
+      Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+      'Content-Type': 'application/json'
+    }
+  }
+)
+
+return created({
+  payment_url: response.data.data.authorization_url
+})
   } catch (err) {
     return serverError(err)
   }

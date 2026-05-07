@@ -7,6 +7,16 @@ export interface ApiResponse<T = unknown> {
   data?: T;
 }
 
+// ─── Org Voter Pool ───────────────────────────────────────────────────────────
+
+export interface OrgVoter {
+  org_voter_id: string;
+  org_id: string;
+  email: string;
+  name?: string;
+  created_at: string;
+}
+
 // ─── Org / Admin ──────────────────────────────────────────────────────────────
 
 export interface Org {
@@ -56,6 +66,7 @@ export interface Election {
   show_live_results: boolean;
   leaderboard_mode: LeaderboardMode;
   scheduled_start_at?: string;
+  scheduled_end_at?: string;
   created_at: string;
   updated_at: string;
   started_at?: string;
@@ -69,6 +80,7 @@ export interface CreateElectionPayload {
   show_live_results?: boolean;
   leaderboard_mode?: LeaderboardMode;
   scheduled_start_at?: string;
+  scheduled_end_at?: string;
 }
 
 // ─── Positions ────────────────────────────────────────────────────────────────
@@ -118,6 +130,7 @@ export interface Voter {
   votes_cast: Record<string, string>;
   voted_at?: string;
   invite_sent_at?: string;
+  vote_weight: number;
   created_at: string;
 }
 
@@ -176,6 +189,8 @@ export interface PublicElectionResponse {
     type: ElectionType;
     status: ElectionStatus;
     started_at?: string;
+    scheduled_start_at?: string;
+    scheduled_end_at?: string;
     show_live_results: boolean;
     leaderboard_mode: LeaderboardMode;
   };
@@ -201,6 +216,8 @@ export interface LobbyStateResponse {
   election_title: string;
   election_type: ElectionType;
   started_at: string | null;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
   participants: LobbyParticipant[];
 }
 
@@ -220,6 +237,7 @@ export interface PositionResult {
   candidates: CandidateResult[];
   total_votes: number;
   winner?: CandidateResult;
+  is_tie?: boolean;
 }
 
 export interface ElectionResultsResponse {

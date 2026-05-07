@@ -10,6 +10,8 @@ import { votingRouter } from './routes/voting'
 import { publicRouter } from './routes/public'
 import { resultsRouter } from './routes/results'
 import { uploadsRouter } from './routes/uploads'
+import { orgVotersRouter } from './routes/org-voters'
+import { paymentRouter } from './routes/payment'
 
 export const app = express()
 
@@ -25,10 +27,12 @@ app.use('/elections/:electionId/positions', positionsRouter)
 app.use('/elections/:electionId/positions/:positionId/candidates', candidatesRouter)
 app.use('/elections/:electionId/voters', votersRouter)
 
+app.use('/org-voters', orgVotersRouter)
 app.use('/uploads', uploadsRouter)
 app.use('/vote', votingRouter)
 app.use('/public', publicRouter)
 app.use('/results', resultsRouter)
+app.use('/payment', paymentRouter)   // ← add this line
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok' }))

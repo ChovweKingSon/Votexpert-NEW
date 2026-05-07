@@ -3,15 +3,16 @@ import { createRoute, useNavigate } from '@tanstack/react-router';
 import { useMutation } from '@tanstack/react-query';
 import { rootRoute } from '../../__root';
 import { AdminLayout } from '@/components/templates';
-import { AlertMessage } from '@/components/molecules';
+import { AlertMessage, FormField, DateTimePicker } from '@/components/molecules';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Badge } from '@/components/atoms';
-import { FormField } from '@/components/molecules';
 import { createElection } from '@/api/services/admin.service';
 import { $user, $isAuthenticated, logout } from '@/stores/auth.store';
 import { useStore } from '@nanostores/react';
-import { ArrowLeft, CheckCircle, Globe, Lock, Trophy, Timer } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Globe, Lock, Trophy, Timer, Zap, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Admin, ElectionType, LeaderboardMode } from '@/types';
+
+type ElectionMode = 'immediate' | 'scheduled';
 
 export const adminElectionsCreateRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -28,6 +29,9 @@ function CreateElectionPage() {
     title: '',
     description: '',
     type: 'OPEN' as ElectionType,
+    mode: 'immediate' as ElectionMode,
+    scheduled_start_at: '',
+    scheduled_end_at: '',
     show_live_results: true,
     leaderboard_mode: 'at_end' as LeaderboardMode,
   });
@@ -47,6 +51,12 @@ function CreateElectionPage() {
         type: form.type,
         show_live_results: form.show_live_results,
         leaderboard_mode: form.leaderboard_mode,
+        ...(form.mode === 'scheduled' && form.scheduled_start_at
+          ? { scheduled_start_at: new Date(form.scheduled_start_at).toISOString() }
+          : {}),
+        ...(form.mode === 'scheduled' && form.scheduled_end_at
+          ? { scheduled_end_at: new Date(form.scheduled_end_at).toISOString() }
+          : {}),
       }),
     onSuccess: (election) => setCreatedId(election.election_id),
     onError: (err: Error) => setApiError(err.message),
@@ -55,6 +65,14 @@ function CreateElectionPage() {
   const validate = () => {
     const e: Record<string, string> = {};
     if (!form.title.trim()) e.title = 'Election title is required';
+    if (form.mode === 'scheduled') {
+      if (!form.scheduled_start_at) e.scheduled_start_at = 'Start time is required';
+      if (!form.scheduled_end_at) e.scheduled_end_at = 'End time is required';
+      if (form.scheduled_start_at && form.scheduled_end_at &&
+          new Date(form.scheduled_end_at) <= new Date(form.scheduled_start_at)) {
+        e.scheduled_end_at = 'End time must be after start time';
+      }
+    }
     setErrors(e);
     return !Object.keys(e).length;
   };
@@ -200,6 +218,59 @@ function CreateElectionPage() {
                 </div>
               </div>
 
+              {/* Election Mode */}
+              <div className="space-y-3">
+                <label className="text-sm font-medium">Election Mode</label>
+                <div className="grid grid-cols-2 gap-4">
+                  {([
+                    { value: 'immediate' as const, label: 'Immediate', icon: Zap, desc: 'Start manually when you\'re ready. Positions run sequentially with timers.' },
+                    { value: 'scheduled' as const, label: 'Scheduled', icon: Calendar, desc: 'Set a time window. All positions open simultaneously for the duration.' },
+                  ]).map(({ value, label, icon: Icon, desc }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, mode: value }))}
+                      className={cn(
+                        'rounded-lg border-2 p-4 text-left transition-all',
+                        form.mode === value
+                          ? 'border-green-500 bg-green-500/10'
+                          : 'border-border hover:border-green-500/50'
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <Icon className={cn('h-4 w-4', form.mode === value ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground')} />
+                        <span className="font-medium text-sm">{label}</span>
+                        {form.mode === value && (
+                          <Badge className="ml-auto text-xs bg-green-500/15 text-green-700 dark:text-green-300 border-green-500/30">Selected</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{desc}</p>
+                    </button>
+                  ))}
+                </div>
+
+                {form.mode === 'scheduled' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <DateTimePicker
+                      label="Start Date & Time"
+                      placeholder="When does voting open?"
+                      value={form.scheduled_start_at}
+                      onChange={(iso) => setForm((p) => ({ ...p, scheduled_start_at: iso }))}
+                      minDate={new Date()}
+                      error={errors.scheduled_start_at}
+                    />
+                    <DateTimePicker
+                      label="End Date & Time"
+                      placeholder="When does voting close?"
+                      value={form.scheduled_end_at}
+                      onChange={(iso) => setForm((p) => ({ ...p, scheduled_end_at: iso }))}
+                      minDate={form.scheduled_start_at ? new Date(form.scheduled_start_at) : new Date()}
+                      error={errors.scheduled_end_at}
+                    />
+                  </div>
+                )}
+              </div>
+
               {/* Leaderboard Mode */}
               <div className="space-y-3">
                 <label className="text-sm font-medium">Leaderboard Display</label>
@@ -253,7 +324,7 @@ function CreateElectionPage() {
                 <button
                   type="button"
                   role="switch"
-                  aria-checked={form.show_live_results ? 'true' : 'false'}
+                  aria-checked={form.show_live_results}
                   aria-label="Toggle live results"
                   title="Toggle live results"
                   onClick={() => setForm((p) => ({ ...p, show_live_results: !p.show_live_results }))}

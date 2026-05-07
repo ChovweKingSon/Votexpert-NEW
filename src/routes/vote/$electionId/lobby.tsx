@@ -15,7 +15,7 @@ import { Card, CardContent } from '@/components/atoms';
 import { getLobbyState, startVoteSession } from '@/api/services/voter.service';
 import { $voterSession, setVoterSession } from '@/stores/auth.store';
 import { useStore } from '@nanostores/react';
-import { Loader2, Vote, Users, CheckCircle } from 'lucide-react';
+import { Loader2, Vote, Users, CheckCircle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { LobbyParticipant } from '@/types';
 import { VOTER_SESSION_KEY } from '@/lib/constants';
@@ -73,6 +73,10 @@ function LobbyPage() {
     },
   });
 
+  // Is this a scheduled election? Detect by absence of participant_id in session
+  // (scheduled elections skip joinLobby so never get a participant_id)
+  const isScheduled = !session?.participant_id && !session?.invite_token;
+
   // Detect when election goes ACTIVE → auto-transition to ballot
   React.useEffect(() => {
     if (!data || starting) return;
@@ -82,7 +86,7 @@ function LobbyPage() {
         // Closed election — already have auth token
         navigate({ to: '/vote/$electionId/ballot', params: { electionId } });
       } else {
-        // Open election — create vote session now
+        // Open election (immediate or scheduled) — create vote session now
         sessionMutation.mutate();
       }
     }
@@ -132,6 +136,68 @@ function LobbyPage() {
   const myParticipantId = session.participant_id;
   const electionTitle = data?.election_title ?? 'Election';
 
+  // Scheduled election waiting screen — no participant list, show start/end times
+  if (isScheduled) {
+    const schedStart = data?.scheduled_start_at;
+    const schedEnd = data?.scheduled_end_at;
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <div className="border-b border-border bg-card">
+          <div className="max-w-lg mx-auto px-4 py-4 flex items-center gap-2">
+            <Vote className="h-5 w-5 text-green-600 dark:text-green-400" />
+            <span className="font-semibold text-sm truncate">{electionTitle}</span>
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+          <div className="w-full max-w-md space-y-6 text-center">
+            <div className="relative mx-auto w-24 h-24">
+              <div className="absolute inset-0 rounded-full bg-blue-500/10 animate-ping" />
+              <div className="relative w-24 h-24 rounded-full bg-blue-500/15 border-2 border-blue-500/30 flex items-center justify-center">
+                <Clock className="h-10 w-10 text-blue-600 dark:text-blue-400" />
+              </div>
+            </div>
+
+            <div>
+              <h1 className="text-2xl font-bold">Voting hasn't started yet</h1>
+              <p className="text-muted-foreground text-sm mt-1">
+                This page will refresh automatically when voting opens.
+              </p>
+            </div>
+
+            {(schedStart || schedEnd) && (
+              <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 px-5 py-4 text-left space-y-2.5">
+                <p className="text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wide flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" /> Voting window
+                </p>
+                {schedStart && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Opens</span>
+                    <span className="font-semibold">{new Date(schedStart).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                  </div>
+                )}
+                {schedEnd && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Closes</span>
+                    <span className="font-semibold">{new Date(schedEnd).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-blue-500/60 animate-bounce [animation-delay:0ms]" />
+              <div className="w-2 h-2 rounded-full bg-blue-500/60 animate-bounce [animation-delay:150ms]" />
+              <div className="w-2 h-2 rounded-full bg-blue-500/60 animate-bounce [animation-delay:300ms]" />
+            </div>
+
+            {error && <AlertMessage variant="error">{error}</AlertMessage>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -169,13 +235,9 @@ function LobbyPage() {
 
             {/* Animated dots */}
             <div className="flex justify-center gap-1.5">
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="w-2 h-2 rounded-full bg-green-500/60 animate-bounce"
-                  style={{ animationDelay: `${i * 0.15}s` }}
-                />
-              ))}
+              <div className="w-2 h-2 rounded-full bg-green-500/60 animate-bounce [animation-delay:0ms]" />
+              <div className="w-2 h-2 rounded-full bg-green-500/60 animate-bounce [animation-delay:150ms]" />
+              <div className="w-2 h-2 rounded-full bg-green-500/60 animate-bounce [animation-delay:300ms]" />
             </div>
           </div>
 

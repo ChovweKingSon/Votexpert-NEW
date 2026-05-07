@@ -31,6 +31,8 @@ publicRouter.get('/elections/code/:code', async (req: Request, res: Response) =>
       type: election.type,
       status: election.status,
       election_code: election.election_code,
+      scheduled_start_at: election.scheduled_start_at,
+      scheduled_end_at: election.scheduled_end_at,
     })
   } catch (err) { send.serverError(res, err) }
 })
@@ -65,10 +67,14 @@ publicRouter.get('/elections/:electionId', async (req: Request, res: Response) =
       }))).Items ?? []).map(r => [`${r.position_id}#${r.candidate_id}`, r.vote_count as number])
     )
 
-    const activePosition = election.started_at ? getActivePosition(positions, election.started_at) : null
+    const isScheduled = !!(election.scheduled_start_at || election.scheduled_end_at)
+    const activePosition = (!isScheduled && election.started_at)
+      ? getActivePosition(positions, election.started_at)
+      : null
 
-    // Auto-publish: if election is ACTIVE but all positions have elapsed, publish results immediately
-    if (election.status === ElectionStatus.ACTIVE && activePosition === null && election.started_at) {
+    // Auto-publish for immediate elections: if ACTIVE but all position timers have elapsed, publish now.
+    // Scheduled elections are ended/published by the scheduler Lambda — skip auto-publish here.
+    if (!isScheduled && election.status === ElectionStatus.ACTIVE && activePosition === null && election.started_at) {
       election.status = ElectionStatus.RESULTS_PUBLISHED
       await db.send(new UpdateCommand({
         TableName: Tables.ELECTIONS,
@@ -90,6 +96,8 @@ publicRouter.get('/elections/:electionId', async (req: Request, res: Response) =
         type: election.type, status: election.status, started_at: election.started_at,
         show_live_results: election.show_live_results,
         leaderboard_mode: election.leaderboard_mode ?? 'at_end',
+        scheduled_start_at: election.scheduled_start_at,
+        scheduled_end_at: election.scheduled_end_at,
       },
       positions: positions.map(pos => ({
         ...pos,
@@ -145,6 +153,8 @@ publicRouter.get('/elections/:electionId/lobby', async (req: Request, res: Respo
       election_title: election.title,
       election_type: election.type,
       started_at: election.started_at ?? null,
+      scheduled_start_at: election.scheduled_start_at ?? null,
+      scheduled_end_at: election.scheduled_end_at ?? null,
       participants: participants
         .sort((a, b) => a.joined_at.localeCompare(b.joined_at))
         .map(p => ({ participant_id: p.participant_id, display_name: p.display_name, joined_at: p.joined_at })),

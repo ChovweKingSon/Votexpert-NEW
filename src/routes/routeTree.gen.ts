@@ -16,12 +16,15 @@ import { adminCandidatesRoute } from './admin/candidates';
 import { adminVotersRoute } from './admin/voters';
 import { adminResultsRoute } from './admin/results';
 import { adminSettingsRoute } from './admin/settings';
+import { adminPricingRoute } from './admin/pricing';
+import { adminPaymentSuccessRoute } from './admin/payment-success';
 
 // Voter (new public flow)
 import { voteJoinRoute } from './vote/join';
 import { voteElectionRedirectRoute } from './vote/$electionId/index';
 import { voteBallotRoute } from './vote/$electionId/ballot';
 import { voteLobbyRoute } from './vote/$electionId/lobby';
+import { voteWaitingRoute } from './vote/$electionId/waiting';
 import { publicResultsRoute } from './results/$electionId';
 
 // Build the route tree
@@ -43,11 +46,14 @@ export const routeTree = rootRoute.addChildren([
   adminVotersRoute,
   adminResultsRoute,
   adminSettingsRoute,
+  adminPricingRoute,
+  adminPaymentSuccessRoute,
 
   // Voter / Public
   voteJoinRoute,
   voteElectionRedirectRoute,
   voteLobbyRoute,
   voteBallotRoute,
+  voteWaitingRoute,
   publicResultsRoute,
 ]);

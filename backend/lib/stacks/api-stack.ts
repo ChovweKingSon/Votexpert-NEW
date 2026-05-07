@@ -4,6 +4,8 @@ import * as lambda from 'aws-cdk-lib/aws-lambda'
 import * as lambdaNode from 'aws-cdk-lib/aws-lambda-nodejs'
 import * as iam from 'aws-cdk-lib/aws-iam'
 import * as s3 from 'aws-cdk-lib/aws-s3'
+import * as events from 'aws-cdk-lib/aws-events'
+import * as eventsTargets from 'aws-cdk-lib/aws-events-targets'
 import * as path from 'path'
 import { Construct } from 'constructs'
 import { DatabaseStack } from './database-stack'
@@ -65,6 +67,7 @@ export class ApiStack extends cdk.Stack {
         VOTE_COUNTS_TABLE: db.voteCountsTable.tableName,
         WS_CONNECTIONS_TABLE: db.wsConnectionsTable.tableName,
         LOBBY_PARTICIPANTS_TABLE: db.lobbyParticipantsTable.tableName,
+        ORG_VOTERS_TABLE: db.orgVotersTable.tableName,
         USER_POOL_ID: auth.userPoolId,
         WS_API_ENDPOINT: props.wsCallbackUrl,
         APP_URL: process.env.APP_URL ?? 'http://localhost:5173',
@@ -73,6 +76,8 @@ export class ApiStack extends cdk.Stack {
         SMTP_USER: process.env.SMTP_USER ?? '',
         SMTP_PASS: process.env.SMTP_PASS ?? '',
         EMAIL_FROM: process.env.EMAIL_FROM ?? 'noreply@votexpert.com',
+        PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY ?? '',
+        CLIENT_URL: process.env.CLIENT_URL ?? 'https://votexpert.online',
         UPLOADS_BUCKET: mediaBucket.bucketName,
       },
       bundling: {
@@ -94,6 +99,7 @@ export class ApiStack extends cdk.Stack {
     db.voteCountsTable.grantReadWriteData(apiFn)
     db.wsConnectionsTable.grantReadWriteData(apiFn)
     db.lobbyParticipantsTable.grantReadWriteData(apiFn)
+    db.orgVotersTable.grantReadWriteData(apiFn)
 
     // ─── Grant S3 access (presigned URLs + public read) ───────────────────────
     mediaBucket.grantPut(apiFn)
@@ -121,6 +127,35 @@ export class ApiStack extends cdk.Stack {
         stageName: this.node.tryGetContext('env') ?? 'dev',
         tracingEnabled: true,
       },
+    })
+
+    // ─── Scheduler Lambda (EventBridge 1-minute cron) ─────────────────────────
+    // Starts SCHEDULED elections and ends/publishes ACTIVE scheduled elections
+    // when their time windows arrive. Runs every minute.
+    const schedulerFn = new lambdaNode.NodejsFunction(this, 'SchedulerFn', {
+      functionName: 'votexpert-scheduler',
+      entry: path.join(__dirname, '../../src/functions/scheduler/tick.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+      environment: {
+        NODE_ENV: this.node.tryGetContext('env') ?? 'dev',
+        ELECTIONS_TABLE: db.electionsTable.tableName,
+      },
+      bundling: {
+        minify: true,
+        externalModules: ['@aws-sdk/*'],
+      },
+    })
+
+    db.electionsTable.grantReadWriteData(schedulerFn)
+
+    new events.Rule(this, 'SchedulerRule', {
+      ruleName: 'votexpert-scheduler-tick',
+      description: 'Fires every minute to start/end scheduled elections',
+      schedule: events.Schedule.rate(cdk.Duration.minutes(1)),
+      targets: [new eventsTargets.LambdaFunction(schedulerFn)],
     })
 
     // ─── Outputs ─────────────────────────────────────────────────────────────

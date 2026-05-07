@@ -11,16 +11,17 @@ import {
 import {
   getElection, getPositions, createPosition, deletePosition,
   getCandidates, createCandidate, deleteCandidate,
-  getVoters, addVoters, sendInvites, deleteVoter,
+  getVoters, addVoters, sendInvites, deleteVoter, updateVoterWeight,
   endElection, publishResults,
   deleteElection,
   getPresignedUploadUrl, uploadFileToS3,
+  getOrgVoters,
 } from '@/api/services/admin.service';
 import { $user, $isAuthenticated, logout } from '@/stores/auth.store';
 import { useStore } from '@nanostores/react';
 import {
   ArrowLeft, Play, Square, Trophy, Plus, Trash2,
-  Users, Clock, Globe, Lock, BarChart3, Send, UserPlus, Copy, QrCode, ImagePlus, X as XIcon, AlertTriangle,
+  Users, Clock, Globe, Lock, BarChart3, Send, UserPlus, Copy, QrCode, ImagePlus, X as XIcon, AlertTriangle, Calendar,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { cn } from '@/lib/utils';
@@ -63,6 +64,10 @@ function AdminElectionDetailsPage() {
   const [showVoterForm, setShowVoterForm] = React.useState(false);
   const [voterMsg, setVoterMsg] = React.useState<string | undefined>();
 
+  // Pool selection modal
+  const [showPoolModal, setShowPoolModal] = React.useState(false);
+  const [selectedPoolEmails, setSelectedPoolEmails] = React.useState<Set<string>>(new Set());
+
   React.useEffect(() => {
     if (!isAuthenticated) navigate({ to: '/admin/login' });
   }, [isAuthenticated, navigate]);
@@ -83,6 +88,12 @@ function AdminElectionDetailsPage() {
   const { data: voters = [] } = useQuery({
     queryKey: ['admin', 'election', electionId, 'voters'],
     queryFn: () => getVoters(electionId),
+    enabled: isAuthenticated && election?.type === 'CLOSED',
+  });
+
+  const { data: orgVoterPool = [] } = useQuery({
+    queryKey: ['admin', 'org-voters'],
+    queryFn: getOrgVoters,
     enabled: isAuthenticated && election?.type === 'CLOSED',
   });
 
@@ -112,7 +123,8 @@ function AdminElectionDetailsPage() {
       createPosition(electionId, {
         title: posForm.title.trim(),
         description: posForm.description.trim() || undefined,
-        duration_seconds: parseInt(posForm.duration_seconds, 10),
+        // Scheduled elections: duration is unused (all positions open simultaneously)
+        duration_seconds: isScheduledMode ? 0 : parseInt(posForm.duration_seconds, 10),
       }),
     onSuccess: () => {
       setPosForm({ title: '', duration_seconds: '120', description: '' });
@@ -191,6 +203,13 @@ function AdminElectionDetailsPage() {
     mutationFn: (voterId: string) => deleteVoter(electionId, voterId),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'election', electionId, 'voters'] }),
+  });
+
+  const weightMutation = useMutation({
+    mutationFn: ({ voterId, weight }: { voterId: string; weight: number }) =>
+      updateVoterWeight(electionId, voterId, weight),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'election', electionId, 'voters'] }),
     onError: (err: Error) => setActionError(err.message),
   });
 
@@ -215,6 +234,7 @@ function AdminElectionDetailsPage() {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
   const isEditable = election?.status === 'DRAFT' || election?.status === 'SCHEDULED';
+  const isScheduledMode = !!(election?.scheduled_start_at || election?.scheduled_end_at);
   const electionCode = election?.election_code ?? '';
   const voteUrl = electionCode
     ? `${window.location.origin}/vote/join?code=${electionCode}`
@@ -285,36 +305,50 @@ function AdminElectionDetailsPage() {
                 {/* ── Share section — visible from DRAFT onwards ────────── */}
                 {election.status !== 'RESULTS_PUBLISHED' && electionCode && (
                   <>
-                    <div className="rounded-xl border-2 border-green-500/30 bg-green-500/5 p-4 space-y-3">
-                      <p className="text-xs font-semibold text-green-700 dark:text-green-400 uppercase tracking-wide">
-                        Share with voters
-                      </p>
-                      {/* Big code display */}
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">Join code</p>
-                          <p className="font-mono text-4xl font-bold tracking-[0.3em] text-foreground">
-                            {electionCode}
+                    {election.type === 'CLOSED' ? (
+                      <div className="rounded-xl border-2 border-amber-500/30 bg-amber-500/5 p-4 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">
+                            Closed Election — Invite Only
                           </p>
                         </div>
-                        <div className="flex flex-col gap-2">
-                          <Button variant="outline" size="sm" onClick={copyCode} className="gap-1.5">
-                            <Copy className="h-3.5 w-3.5" />
-                            Copy code
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => setShowQr(true)} className="gap-1.5">
-                            <QrCode className="h-3.5 w-3.5" />
-                            QR Code
-                          </Button>
-                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Voters join using their personal invite link sent by email. Code and QR joining are disabled for closed elections.
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        Voters go to <span className="font-medium">votexpert.online</span> → Join as Voter → enter this code
-                      </p>
-                    </div>
+                    ) : (
+                      <div className="rounded-xl border-2 border-green-500/30 bg-green-500/5 p-4 space-y-3">
+                        <p className="text-xs font-semibold text-green-700 dark:text-green-400 uppercase tracking-wide">
+                          Share with voters
+                        </p>
+                        {/* Big code display */}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Join code</p>
+                            <p className="font-mono text-4xl font-bold tracking-[0.3em] text-foreground">
+                              {electionCode}
+                            </p>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <Button variant="outline" size="sm" onClick={copyCode} className="gap-1.5">
+                              <Copy className="h-3.5 w-3.5" />
+                              Copy code
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => setShowQr(true)} className="gap-1.5">
+                              <QrCode className="h-3.5 w-3.5" />
+                              QR Code
+                            </Button>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Voters go to <span className="font-medium">votexpert.online</span> → Join as Voter → enter this code
+                        </p>
+                      </div>
+                    )}
 
-                    {/* QR modal */}
-                    {showQr && (
+                    {/* QR modal — open elections only */}
+                    {showQr && election.type !== 'CLOSED' && (
                       <div
                         className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
                         onClick={() => setShowQr(false)}
@@ -342,9 +376,37 @@ function AdminElectionDetailsPage() {
                   </>
                 )}
 
+                {/* Scheduled election info banner */}
+                {isScheduledMode && election.scheduled_start_at && (
+                  <div className="rounded-xl border-2 border-blue-500/30 bg-blue-500/5 p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">
+                        Scheduled Election — Automatic
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                      <div>
+                        <p className="font-medium text-foreground">Starts</p>
+                        <p>{new Date(election.scheduled_start_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                      </div>
+                      {election.scheduled_end_at && (
+                        <div>
+                          <p className="font-medium text-foreground">Ends</p>
+                          <p>{new Date(election.scheduled_end_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This election starts and ends automatically. No presenter mode needed — all positions open simultaneously during the window.
+                    </p>
+                  </div>
+                )}
+
                 {/* Action buttons */}
                 <div className="flex flex-wrap gap-3">
-                  {(election.status === 'DRAFT' || election.status === 'SCHEDULED') && (
+                  {/* Immediate elections: presenter is the primary action */}
+                  {!isScheduledMode && (election.status === 'DRAFT' || election.status === 'SCHEDULED') && (
                     <Button
                       className="bg-green-600 hover:bg-green-700 text-white gap-2"
                       onClick={() => navigate({ to: '/admin/elections/$electionId/present', params: { electionId } })}
@@ -354,24 +416,36 @@ function AdminElectionDetailsPage() {
                       Open Presenter
                     </Button>
                   )}
+                  {!isScheduledMode && election.status === 'ACTIVE' && (
+                    <Button
+                      className="bg-green-600 hover:bg-green-700 text-white gap-2"
+                      onClick={() => navigate({ to: '/admin/elections/$electionId/present', params: { electionId } })}
+                    >
+                      <BarChart3 className="mr-2 h-4 w-4" />
+                      Live Presenter
+                    </Button>
+                  )}
+                  {/* Scheduled elections: presenter is optional */}
+                  {isScheduledMode && election.status === 'ACTIVE' && (
+                    <Button
+                      variant="outline"
+                      className="gap-2"
+                      onClick={() => navigate({ to: '/admin/elections/$electionId/present', params: { electionId } })}
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                      Open Presenter (optional)
+                    </Button>
+                  )}
+                  {/* End election — available for all ACTIVE elections */}
                   {election.status === 'ACTIVE' && (
-                    <>
-                      <Button
-                        className="bg-green-600 hover:bg-green-700 text-white gap-2"
-                        onClick={() => navigate({ to: '/admin/elections/$electionId/present', params: { electionId } })}
-                      >
-                        <BarChart3 className="mr-2 h-4 w-4" />
-                        Live Presenter
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        onClick={() => { setActionError(undefined); endMutation.mutate(); }}
-                        disabled={endMutation.isPending}
-                      >
-                        <Square className="mr-2 h-4 w-4" />
-                        {endMutation.isPending ? 'Ending…' : 'End Election'}
-                      </Button>
-                    </>
+                    <Button
+                      variant="destructive"
+                      onClick={() => { setActionError(undefined); endMutation.mutate(); }}
+                      disabled={endMutation.isPending}
+                    >
+                      <Square className="mr-2 h-4 w-4" />
+                      {endMutation.isPending ? 'Ending…' : isScheduledMode ? 'End Early' : 'End Election'}
+                    </Button>
                   )}
                   {election.status === 'CLOSED' && (
                     <Button
@@ -393,7 +467,7 @@ function AdminElectionDetailsPage() {
                   )}
                 </div>
 
-                {positions.length === 0 && election.status === 'DRAFT' && (
+                {!isScheduledMode && positions.length === 0 && election.status === 'DRAFT' && (
                   <p className="text-sm text-amber-600 dark:text-amber-400">
                     Add at least one position before opening the presenter.
                   </p>
@@ -476,15 +550,17 @@ function AdminElectionDetailsPage() {
                         disabled={addPosMutation.isPending}
                         required
                       />
-                      <FormField
-                        label="Voting Duration (seconds)"
-                        type="number"
-                        placeholder="120"
-                        value={posForm.duration_seconds}
-                        onChange={(e) => setPosForm((p) => ({ ...p, duration_seconds: e.target.value }))}
-                        disabled={addPosMutation.isPending}
-                        required
-                      />
+                      {!isScheduledMode && (
+                        <FormField
+                          label="Voting Duration (seconds)"
+                          type="number"
+                          placeholder="120"
+                          value={posForm.duration_seconds}
+                          onChange={(e) => setPosForm((p) => ({ ...p, duration_seconds: e.target.value }))}
+                          disabled={addPosMutation.isPending}
+                          required
+                        />
+                      )}
                       <div className="flex gap-2">
                         <Button
                           size="sm"
@@ -519,7 +595,7 @@ function AdminElectionDetailsPage() {
                           <div>
                             <span className="font-medium text-sm">{pos.title}</span>
                             <span className="ml-2 text-xs text-muted-foreground">
-                              {pos.duration_seconds}s · {candidates.length} candidate{candidates.length !== 1 ? 's' : ''}
+                              {!isScheduledMode && `${pos.duration_seconds}s · `}{candidates.length} candidate{candidates.length !== 1 ? 's' : ''}
                             </span>
                           </div>
                           <div className="flex gap-2">
@@ -678,7 +754,7 @@ function AdminElectionDetailsPage() {
                     <Users className="h-5 w-5 text-muted-foreground" />
                     Voters ({voters.length})
                   </CardTitle>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     {isEditable && (
                       <Button
                         variant="outline"
@@ -688,6 +764,25 @@ function AdminElectionDetailsPage() {
                       >
                         <UserPlus className="h-4 w-4" />
                         Add Voters
+                      </Button>
+                    )}
+                    {isEditable && orgVoterPool.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const existingEmails = new Set(voters.map((v) => v.email));
+                          setSelectedPoolEmails(new Set(
+                            orgVoterPool
+                              .filter((v) => !existingEmails.has(v.email))
+                              .map((v) => v.email)
+                          ));
+                          setShowPoolModal(true);
+                        }}
+                        className="gap-1.5"
+                      >
+                        <Users className="h-4 w-4" />
+                        Select from Pool
                       </Button>
                     )}
                     {voters.length > 0 && (
@@ -742,30 +837,59 @@ function AdminElectionDetailsPage() {
                     </p>
                   ) : (
                     <div className="rounded-lg border border-border divide-y divide-border">
-                      {voters.map((v) => (
-                        <div key={v.voter_id} className="flex items-center justify-between px-4 py-2.5">
-                          <div>
-                            <p className="text-sm">{v.email}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {v.voted_at
-                                ? `Voted ${new Date(v.voted_at).toLocaleString()}`
-                                : v.invite_sent_at
-                                ? `Invite sent ${new Date(v.invite_sent_at).toLocaleString()}`
-                                : 'Invite not sent'}
-                            </p>
+                      {voters.map((v) => {
+                        const weight = v.vote_weight ?? 1;
+                        const isJudge = weight > 1;
+                        return (
+                          <div key={v.voter_id} className="flex items-center justify-between px-4 py-2.5 gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm truncate">{v.email}</p>
+                                {isJudge && (
+                                  <Badge className="text-xs bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30 shrink-0">
+                                    Judge ×{weight}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {v.voted_at
+                                  ? `Voted ${new Date(v.voted_at).toLocaleString()}`
+                                  : v.invite_sent_at
+                                  ? `Invite sent ${new Date(v.invite_sent_at).toLocaleString()}`
+                                  : 'Invite not sent'}
+                              </p>
+                            </div>
+                            {isEditable && (
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {/* Weight selector */}
+                                <select
+                                  value={weight}
+                                  onChange={(e) =>
+                                    weightMutation.mutate({ voterId: v.voter_id, weight: Number(e.target.value) })
+                                  }
+                                  disabled={weightMutation.isPending}
+                                  title="Vote weight"
+                                  className="text-xs rounded border border-input bg-background px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                                >
+                                  {[1, 2, 3, 4, 5].map((w) => (
+                                    <option key={w} value={w}>
+                                      {w === 1 ? 'Voter (×1)' : `Judge (×${w})`}
+                                    </option>
+                                  ))}
+                                </select>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => deleteVoterMutation.mutate(v.voter_id)}
+                                  className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            )}
                           </div>
-                          {isEditable && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => deleteVoterMutation.mutate(v.voter_id)}
-                              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
@@ -774,6 +898,96 @@ function AdminElectionDetailsPage() {
           </>
         )}
       </div>
+
+      {/* ── Select from Pool Modal ─────────────────────────────────────────── */}
+      {showPoolModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setShowPoolModal(false)}
+        >
+          <div
+            className="bg-card border border-border rounded-xl w-full max-w-md max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <div>
+                <p className="font-semibold">Select from Voter Pool</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {selectedPoolEmails.size} selected
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPoolModal(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <XIcon className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Voter list */}
+            <div className="overflow-y-auto flex-1 divide-y divide-border">
+              {orgVoterPool.map((v) => {
+                const alreadyAdded = voters.some((ev) => ev.email === v.email);
+                const checked = selectedPoolEmails.has(v.email);
+                return (
+                  <label
+                    key={v.org_voter_id}
+                    className={cn(
+                      'flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-muted/50 transition-colors',
+                      alreadyAdded && 'opacity-50 cursor-not-allowed'
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={alreadyAdded}
+                      onChange={() => {
+                        if (alreadyAdded) return;
+                        setSelectedPoolEmails((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(v.email)) next.delete(v.email);
+                          else next.add(v.email);
+                          return next;
+                        });
+                      }}
+                      className="h-4 w-4 rounded border-border"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{v.email}</p>
+                      {alreadyAdded && (
+                        <p className="text-xs text-muted-foreground">Already in election</p>
+                      )}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-2 px-5 py-4 border-t border-border">
+              <Button
+                className="flex-1"
+                disabled={selectedPoolEmails.size === 0 || addVotersMutation.isPending}
+                onClick={() => {
+                  const emails = [...selectedPoolEmails];
+                  addVoters(electionId, emails).then(() => {
+                    queryClient.invalidateQueries({ queryKey: ['admin', 'election', electionId, 'voters'] });
+                    setShowPoolModal(false);
+                    setVoterMsg(`Added ${emails.length} voter${emails.length !== 1 ? 's' : ''} from pool.`);
+                  }).catch((err: Error) => setActionError(err.message));
+                }}
+              >
+                Add {selectedPoolEmails.size > 0 ? `${selectedPoolEmails.size} ` : ''}Selected
+              </Button>
+              <Button variant="outline" onClick={() => setShowPoolModal(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }
