@@ -3,8 +3,11 @@
 import { Router, Request, Response } from 'express'
 import axios from 'axios'
 import crypto from 'crypto'
+import { PutCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb'
+import { v4 as uuid } from 'uuid'
 import { requireAuth } from '../middleware/auth'
 import { send } from '../lib/utils/response'
+import { db, Tables } from '../lib/db/client'
 
 export const paymentRouter = Router()
 
@@ -79,27 +82,49 @@ paymentRouter.get('/verify/:reference', requireAuth, async (req: Request, res: R
     const plan   = metadata?.plan
     const org_id = metadata?.org_id
 
-    // ── TODO: Save payment record to DynamoDB here ──────────────────────────
-    // Example:
-    // await db.send(new PutCommand({
-    //   TableName: Tables.PAYMENTS,
-    //   Item: {
-    //     payment_id:  uuid(),
-    //     org_id,
-    //     plan,
-    //     amount:      amount / 100,
-    //     reference,
-    //     email:       customer.email,
-    //     paid_at:     new Date().toISOString(),
-    //   }
-    // }))
-    // ────────────────────────────────────────────────────────────────────────
+    // Persist only if this reference hasn't already been recorded (webhook may have beaten us)
+    const existing = await db.send(new QueryCommand({
+      TableName: Tables.PAYMENTS,
+      IndexName: 'reference-index',
+      KeyConditionExpression: '#ref = :ref',
+      ExpressionAttributeNames: { '#ref': 'reference' },
+      ExpressionAttributeValues: { ':ref': reference },
+      Limit: 1,
+    }))
+
+    if (!existing.Items?.length) {
+      await Promise.all([
+        db.send(new PutCommand({
+          TableName: Tables.PAYMENTS,
+          Item: {
+            payment_id: uuid(),
+            org_id,
+            plan,
+            amount:     amount / 100, // store in Naira
+            reference,
+            email:      customer.email,
+            paid_at:    new Date().toISOString(),
+            source:     'verify',
+          },
+        })),
+        db.send(new UpdateCommand({
+          TableName: Tables.ORGS,
+          Key: { org_id },
+          UpdateExpression: 'SET #plan = :plan, plan_activated_at = :activated_at',
+          ExpressionAttributeNames: { '#plan': 'plan' },
+          ExpressionAttributeValues: {
+            ':plan':         plan,
+            ':activated_at': new Date().toISOString(),
+          },
+        })),
+      ])
+    }
 
     send.ok(res, {
       success:   true,
       plan,
       org_id,
-      amount:    amount / 100, // convert back from kobo to Naira
+      amount:    amount / 100,
       reference,
       email:     customer.email,
     })
@@ -111,36 +136,72 @@ paymentRouter.get('/verify/:reference', requireAuth, async (req: Request, res: R
 // ─── POST /payment/webhook ────────────────────────────────────────────────────
 // Paystack webhook — called directly by Paystack after every transaction
 // This is a backup in case the user closes the browser before being redirected
-paymentRouter.post('/webhook', (req: Request, res: Response) => {
+paymentRouter.post('/webhook', async (req: Request, res: Response) => {
+  // Process fully before responding — in Lambda, any async work after res.send()
+  // is abandoned when serverless-express resolves its promise on response end.
   try {
     const signature = req.headers['x-paystack-signature'] as string
 
-    // Validate the webhook is genuinely from Paystack
     const hash = crypto
       .createHmac('sha512', PAYSTACK_SECRET_KEY)
       .update(JSON.stringify(req.body))
       .digest('hex')
 
     if (hash !== signature) {
-      return res.status(401).json({ error: 'Unauthorized' })
+      return res.sendStatus(200)
     }
 
     const event = req.body
 
     if (event.event === 'charge.success') {
-      const { reference, metadata } = event.data
+      const { reference, metadata, amount, customer } = event.data
       const plan   = metadata?.plan
       const org_id = metadata?.org_id
 
-      // ── TODO: Activate plan in DynamoDB here ─────────────────────────────
-      console.log(`Payment successful: ${plan} for org ${org_id} — ref: ${reference}`)
-      // ─────────────────────────────────────────────────────────────────────
+      if (plan && org_id) {
+        // Idempotency: skip if verify endpoint already recorded this reference
+        const existing = await db.send(new QueryCommand({
+          TableName: Tables.PAYMENTS,
+          IndexName: 'reference-index',
+          KeyConditionExpression: '#ref = :ref',
+          ExpressionAttributeNames: { '#ref': 'reference' },
+          ExpressionAttributeValues: { ':ref': reference },
+          Limit: 1,
+        }))
+
+        if (!existing.Items?.length) {
+          await Promise.all([
+            db.send(new PutCommand({
+              TableName: Tables.PAYMENTS,
+              Item: {
+                payment_id: uuid(),
+                org_id,
+                plan,
+                amount:     amount / 100,
+                reference,
+                email:      customer?.email ?? '',
+                paid_at:    new Date().toISOString(),
+                source:     'webhook',
+              },
+            })),
+            db.send(new UpdateCommand({
+              TableName: Tables.ORGS,
+              Key: { org_id },
+              UpdateExpression: 'SET #plan = :plan, plan_activated_at = :activated_at',
+              ExpressionAttributeNames: { '#plan': 'plan' },
+              ExpressionAttributeValues: {
+                ':plan':         plan,
+                ':activated_at': new Date().toISOString(),
+              },
+            })),
+          ])
+        }
+      }
     }
 
-    // Always return 200 so Paystack stops retrying
     res.sendStatus(200)
   } catch (err) {
-    console.error('Webhook error:', err)
-    res.sendStatus(200) // still return 200 to prevent Paystack retries
+    console.error('Webhook processing error:', err)
+    res.sendStatus(200) // always 200 so Paystack stops retrying
   }
 })
